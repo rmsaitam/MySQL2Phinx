@@ -4,16 +4,16 @@
  *
  * Commandline usage:
  * ```
- * $ php -f mysql2phinx [database] [user] [password] > migration.php
+ * $ php -f mysql2phinx [database] [user] [password] [tipo_criacao=table|fk] > migration.php
  * ```
  */
 
-if ($argc < 4) {
+if ($argc < 5) {
     echo '===============================' . PHP_EOL;
     echo 'Phinx MySQL migration generator' . PHP_EOL;
     echo '===============================' . PHP_EOL;
     echo 'Usage:' . PHP_EOL;
-    echo 'php -f ' . $argv[0] . ' [database] [user] [password] > migration.php';
+    echo 'php -f ' . $argv[0] . ' [database] [user] [password] [tipo_criacao] > migration.php';
     echo PHP_EOL;
     exit;
 }
@@ -25,6 +25,8 @@ $config = array(
     'host'    => $argc === 5 ? $argv[6] : 'localhost',
     'port'    => $argc === 6 ? $argv[5] : '3306'
 );
+
+define('TIPO_CRIACAO', $argv[4]); // table | fk
 
 function createMigration($mysqli, $indent = 2)
 {
@@ -55,23 +57,36 @@ function getTableMigration($table, $mysqli, $indent)
     $ind = getIndentation($indent);
 
     $output = array();
-    $output[] = $ind . '// Migration for table ' . $table;
-    $output[] = $ind . '$table = $this->table(\'' . $table . '\');';
-    $output[] = $ind . '$table';
 
-    foreach (getColumns($table, $mysqli) as $column) {
-        if ($column['Field'] !== 'id') {
-            $output[] = getColumnMigration($column['Field'], $column, $indent + 1);
-        }
+    switch (TIPO_CRIACAO) {
+        case 'table': 
+            $output[] = $ind . '// Migration for table ' . $table; 
+            $output[] = $ind . 'if(!$this->hasTable(\'' . $table . '\')) :';
+            $output[] = $ind . '$table = $this->table(\'' . $table . '\');';
+            $output[] = $ind . '$table';
+            foreach (getColumns($table, $mysqli) as $column) {
+                if ($column['Field'] !== 'id') {
+                    $output[] = getColumnMigration($column['Field'], $column, $indent + 1);
+                }
+            }
+            $output[] = $ind . '    ->create();';
+            $output[] = $ind . 'endif;';
+            $output[] = PHP_EOL;
+            break;
+
+        case 'fk':
+            if ($foreign_keys = getForeignKeysMigrations(getForeignKeys($table, $mysqli), $indent + 1)) {
+                $output[] = $ind . '// Migration for table ' . $table; 
+                $output[] = $ind . 'if($this->hasTable(\'' . $table . '\')) :';
+                $output[] = $ind . '$table = $this->table(\'' . $table . '\');';
+                $output[] = $ind . '$table';
+                    $output[] = $foreign_keys;
+                    $output[] = $ind . '    ->update();';
+                    $output[] = $ind . 'endif;';
+                    $output[] = PHP_EOL;
+                }
+            break;
     }
-
-    if ($foreign_keys = getForeignKeysMigrations(getForeignKeys($table, $mysqli), $indent + 1)) {
-        $output[] = $foreign_keys;
-    }
-
-    $output[] = $ind . '    ->create();';
-    $output[] = PHP_EOL;
-
     return implode(PHP_EOL, $output);
 }
 
@@ -150,6 +165,13 @@ function getPhinxColumnType($columndata)
         case 'mediumint':
             return 'integer';
 
+        case 'bigint':
+            return 'biginteger';
+
+        case 'decimal':
+        case 'double':
+            return 'decimal';
+
         case 'timestamp':
             return 'timestamp';
 
@@ -158,6 +180,9 @@ function getPhinxColumnType($columndata)
 
         case 'datetime':
             return 'datetime';
+
+        case 'time':
+            return 'time';
 
         case 'enum':
             return 'enum';
@@ -214,7 +239,7 @@ function getPhinxColumnAttibutes($phinxtype, $columndata)
             $limit = 'MysqlAdapter::INT_MEDIUM';
             break;
 
-        case 'bigint':
+        case 'biginteger':
             $limit = 'MysqlAdapter::INT_BIG';
             break;
 
@@ -305,15 +330,22 @@ function getIndentation($level)
     return str_repeat('    ', $level);
 }
 
+$className = TIPO_CRIACAO == 'table' ? 'InitialMigrationTable' : 'InitialMigrationFk';
 echo '<?php' . PHP_EOL;
 echo 'use Phinx\Migration\AbstractMigration;' . PHP_EOL;
 echo 'use Phinx\Db\Adapter\MysqlAdapter;' . PHP_EOL . PHP_EOL;
 
-echo 'class InitialMigration extends AbstractMigration' . PHP_EOL;
+echo 'class '. $className .' extends AbstractMigration' . PHP_EOL;
 echo '{' . PHP_EOL;
-echo '    public function up()' . PHP_EOL;
+if (TIPO_CRIACAO == 'table') {
+    echo '    public function up()' . PHP_EOL;
+} else {
+    echo '    public function change()' . PHP_EOL;
+}
 echo '    {' . PHP_EOL;
 echo '        // Automatically created phinx migration commands for tables from database ' . $config['name'] . PHP_EOL . PHP_EOL;
-echo createMigration(getMysqliConnection($config));
+echo '        $this->query("SET FOREIGN_KEY_CHECKS=0;");' . PHP_EOL;
+echo createMigration(getMysqliConnection($config)) . PHP_EOL; 
+echo '        $this->query("SET FOREIGN_KEY_CHECKS=1;");' . PHP_EOL;
 echo '    }' . PHP_EOL;
 echo '}' . PHP_EOL;
