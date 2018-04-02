@@ -5,8 +5,10 @@ A simple cli php script to generate a [phinx](https://github.com/robmorgan/phinx
 ## Usage
 
 ```
-$ php -f mysql2phinx.php [database] [user] [password] > migration.php
+$ php -f mysql2phinx.php [database] [user] [password] table > tables.php
+$ php -f mysql2phinx.php [database] [user] [password] fk > fktables.php
 ```
+
 
 Will create an initial migration class in the file `migration.php` for all tables in the database passed. 
 
@@ -18,11 +20,8 @@ The `id` column will be unsigned. Phinx does not currently supported unsigned pr
 
 Not all phinx functionality is covered! **Check your migration code before use!**
 
-Currently **not supported**:
+Add column types **supported**:
 
 * Column types:
-  * [ ] `float`
   * [ ] `decimal`
   * [ ] `time`
-  * [ ] `binary`
-  * [ ] `boolean`
