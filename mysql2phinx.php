@@ -81,7 +81,7 @@ function getTableMigration($table, $mysqli, $indent)
                 $output[] = $ind . '$table = $this->table(\'' . $table . '\');';
                 $output[] = $ind . '$table';
                     $output[] = $foreign_keys;
-                    $output[] = $ind . '    ->update();';
+                    $output[] = $ind . '    ->save();';
                     $output[] = $ind . 'endif;';
                     $output[] = PHP_EOL;
                 }
@@ -166,7 +166,7 @@ function getPhinxColumnType($columndata)
             return 'integer';
 
         case 'bigint':
-            return 'biginteger';
+            return 'integer';
 
         case 'decimal':
         case 'double':
